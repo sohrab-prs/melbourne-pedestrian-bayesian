@@ -1,0 +1,21 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# renv local library/cache
+renv/library/
+renv/staging/
+renv/python/
+
+# Raw and intermediate data
+data/raw/
+data/interim/
+
+# Large generated MCMC objects
+outputs/mcmc/*.rds
+outputs/mcmc/*.RData
+
+# OS files
+.DS_Store
+Thumbs.db
