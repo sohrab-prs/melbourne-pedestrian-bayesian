@@ -49,6 +49,9 @@ business_id <-
 dwellings_id <-
   "residential-dwellings"
 
+buildings_id <-
+  "2023-building-footprints"
+
 # ------------------------------------------------------------
 # 3. Construct API request for 2025 pedestrian counts
 # ------------------------------------------------------------
@@ -105,6 +108,14 @@ dwellings_url <- paste0(
   "&with_bom=false"
 )
 
+# 2023 building-footprint polygons
+buildings_url <- paste0(
+  api_root,
+  buildings_id,
+  "/exports/geojson?",
+  "timezone=Australia%2FMelbourne"
+)
+
 # ------------------------------------------------------------
 # 5. Define raw-data filenames
 # ------------------------------------------------------------
@@ -131,6 +142,12 @@ dwellings_file <- here(
   "data",
   "raw",
   "clue_residential_dwellings_2024.csv"
+)
+
+buildings_file <- here(
+  "data",
+  "raw",
+  "building_footprints_2023.geojson"
 )
 
 # ------------------------------------------------------------
@@ -198,6 +215,12 @@ download_if_needed(
   min_size = 10000
 )
 
+download_if_needed(
+  buildings_url,
+  buildings_file,
+  min_size = 1e6
+)
+
 message("Download checks completed.")
 
 # ------------------------------------------------------------
@@ -208,7 +231,8 @@ required_files <- c(
   counts_file,
   sensors_file,
   business_file,
-  dwellings_file
+  dwellings_file,
+  buildings_file
 )
 
 stopifnot(
@@ -238,19 +262,21 @@ new_sources <- tibble(
     counts_id,
     sensors_id,
     business_id,
-    dwellings_id
+    dwellings_id,
+    buildings_id
   ),
   
   dataset_name = c(
     "Pedestrian Counting System (counts per hour)",
     "Pedestrian Counting System - Sensor Locations",
     "Business establishments location and industry classification",
-    "Residential dwellings"
+    "Residential dwellings",
+    "2023 Building Footprints"
   ),
   
   provider = rep(
     "City of Melbourne",
-    4
+    5
   ),
   
   source_url = c(
@@ -273,6 +299,11 @@ new_sources <- tibble(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
       dwellings_id,
       "/"
+    ),
+    paste0(
+      "https://data.melbourne.vic.gov.au/explore/dataset/",
+      buildings_id,
+      "/"
     )
   ),
   
@@ -280,41 +311,50 @@ new_sources <- tibble(
     "2025",
     "Current register; 2025 location derived from hourly records",
     "2024",
-    "2024"
+    "2024",
+    "2023"
   ),
   
   download_date = rep(
     Sys.Date(),
-    4
+    5
   ),
   
   spatial_unit = c(
     "Pedestrian sensor-hour",
     "Pedestrian sensor",
     "Business establishment",
-    "Residential building/location"
+    "Residential building/location",
+    "Building footprint polygon"
   ),
   
-  geometry_type = rep(
+  geometry_type = c(
     "Point",
-    4
+    "Point",
+    "Point",
+    "Point",
+    "Polygon/MultiPolygon"
   ),
   
-  crs_original = rep(
+  crs_original = c(
     "WGS84 geographic coordinates",
-    4
+    "WGS84 geographic coordinates",
+    "WGS84 geographic coordinates",
+    "WGS84 geographic coordinates",
+    "GeoJSON spatial reference"
   ),
   
   license = rep(
     "CC BY",
-    4
+    5
   ),
   
   raw_filename = c(
     basename(counts_file),
     basename(sensors_file),
     basename(business_file),
-    basename(dwellings_file)
+    basename(dwellings_file),
+    basename(buildings_file)
   ),
   
   notes = c(
@@ -333,6 +373,13 @@ new_sources <- tibble(
     paste(
       "API-filtered to CLUE census year 2024.",
       "Point-level residential dwelling data."
+    ),
+    paste(
+      "City of Melbourne 2023 building-footprint dataset.",
+      "Individual features contain source date_captured values from",
+      "multiple capture campaigns and are therefore not uniformly captured in 2023.",
+      "Overlapping footprint geometry will be unioned before",
+      "ground-coverage calculations."
     )
   )
 )
