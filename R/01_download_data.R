@@ -52,6 +52,9 @@ dwellings_id <-
 buildings_id <-
   "2023-building-footprints"
 
+weather_id <- 
+  "open-meteo-historical-weather-melbourne-2025"
+
 # ------------------------------------------------------------
 # 3. Construct API request for 2025 pedestrian counts
 # ------------------------------------------------------------
@@ -67,6 +70,22 @@ counts_url <- paste0(
   "&delimiter=%2C",
   "&timezone=Australia%2FMelbourne",
   "&with_bom=false"
+)
+
+# ------------------------------------------------------------
+# Historical weather: central Melbourne, calendar year 2025
+# ------------------------------------------------------------
+
+weather_url <- paste0(
+  "https://archive-api.open-meteo.com/v1/archive?",
+  "latitude=-37.83",
+  "&longitude=144.98",
+  "&start_date=2025-01-01",
+  "&end_date=2025-12-31",
+  "&daily=temperature_2m_mean,temperature_2m_max,precipitation_sum",
+  "&timezone=Australia%2FMelbourne",
+  "&models=era5",
+  "&format=csv"
 )
 
 # ------------------------------------------------------------
@@ -150,6 +169,12 @@ buildings_file <- here(
   "building_footprints_2023.geojson"
 )
 
+weather_file <- here(
+  "data",
+  "raw",
+  "weather_melbourne_2025.csv"
+)
+
 # ------------------------------------------------------------
 # 6. Download data
 # ------------------------------------------------------------
@@ -221,6 +246,12 @@ download_if_needed(
   min_size = 1e6
 )
 
+download_if_needed(
+  weather_url,
+  weather_file,
+  min_size = 5000
+)
+
 message("Download checks completed.")
 
 # ------------------------------------------------------------
@@ -232,7 +263,8 @@ required_files <- c(
   sensors_file,
   business_file,
   dwellings_file,
-  buildings_file
+  buildings_file,
+  weather_file
 )
 
 stopifnot(
@@ -263,7 +295,8 @@ new_sources <- tibble(
     sensors_id,
     business_id,
     dwellings_id,
-    buildings_id
+    buildings_id,
+    weather_id
   ),
   
   dataset_name = c(
@@ -271,40 +304,37 @@ new_sources <- tibble(
     "Pedestrian Counting System - Sensor Locations",
     "Business establishments location and industry classification",
     "Residential dwellings",
-    "2023 Building Footprints"
+    "2023 Building Footprints",
+    "Open-Meteo historical weather - central Melbourne"
   ),
   
-  provider = rep(
-    "City of Melbourne",
-    5
+  provider = c(
+    rep("City of Melbourne", 5),
+    "Open-Meteo"
   ),
   
   source_url = c(
     paste0(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
-      counts_id,
-      "/"
+      counts_id, "/"
     ),
     paste0(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
-      sensors_id,
-      "/"
+      sensors_id, "/"
     ),
     paste0(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
-      business_id,
-      "/"
+      business_id, "/"
     ),
     paste0(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
-      dwellings_id,
-      "/"
+      dwellings_id, "/"
     ),
     paste0(
       "https://data.melbourne.vic.gov.au/explore/dataset/",
-      buildings_id,
-      "/"
-    )
+      buildings_id, "/"
+    ),
+    "https://open-meteo.com/en/docs/historical-weather-api"
   ),
   
   reference_year = c(
@@ -312,12 +342,13 @@ new_sources <- tibble(
     "Current register; 2025 location derived from hourly records",
     "2024",
     "2024",
-    "2023"
+    "2023",
+    "2025"
   ),
   
   download_date = rep(
     Sys.Date(),
-    5
+    6
   ),
   
   spatial_unit = c(
@@ -325,7 +356,8 @@ new_sources <- tibble(
     "Pedestrian sensor",
     "Business establishment",
     "Residential building/location",
-    "Building footprint polygon"
+    "Building footprint polygon",
+    "Day at central Melbourne reference coordinate"
   ),
   
   geometry_type = c(
@@ -333,20 +365,19 @@ new_sources <- tibble(
     "Point",
     "Point",
     "Point",
-    "Polygon/MultiPolygon"
+    "Polygon/MultiPolygon",
+    "Point"
   ),
   
   crs_original = c(
-    "WGS84 geographic coordinates",
-    "WGS84 geographic coordinates",
-    "WGS84 geographic coordinates",
-    "WGS84 geographic coordinates",
-    "GeoJSON spatial reference"
+    rep("WGS84 geographic coordinates", 4),
+    "GeoJSON spatial reference",
+    "WGS84 geographic coordinates"
   ),
   
-  license = rep(
-    "CC BY",
-    5
+  license = c(
+    rep("CC BY", 5),
+    "CC BY 4.0"
   ),
   
   raw_filename = c(
@@ -354,32 +385,39 @@ new_sources <- tibble(
     basename(sensors_file),
     basename(business_file),
     basename(dwellings_file),
-    basename(buildings_file)
+    basename(buildings_file),
+    basename(weather_file)
   ),
   
   notes = c(
-    paste(
-      "API-filtered to calendar year 2025.",
-      "Raw file must not be manually edited."
-    ),
+    "API-filtered to calendar year 2025. Raw file must not be manually edited.",
+    
     paste(
       "Current sensor register used for sensor metadata.",
       "Historical 2025 spatial position is derived from hourly observations."
     ),
+    
     paste(
       "API-filtered to CLUE census year 2024.",
       "Point-level business establishment data."
     ),
+    
     paste(
       "API-filtered to CLUE census year 2024.",
       "Point-level residential dwelling data."
     ),
+    
     paste(
       "City of Melbourne 2023 building-footprint dataset.",
-      "Individual features contain source date_captured values from",
-      "multiple capture campaigns and are therefore not uniformly captured in 2023.",
-      "Overlapping footprint geometry will be unioned before",
-      "ground-coverage calculations."
+      "Individual features contain date_captured values from multiple",
+      "capture campaigns. Overlapping footprints will be unioned",
+      "before ground-coverage calculations."
+    ),
+    
+    paste(
+      "ERA5 historical reanalysis at latitude -37.83,",
+      "longitude 144.98. Daily mean/max temperature and",
+      "precipitation for calendar year 2025."
     )
   )
 )
