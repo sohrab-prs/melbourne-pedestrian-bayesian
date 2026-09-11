@@ -63,4 +63,12 @@ Resident demographic characteristics use the 2021 ABS Census.
 These contextual variables represent relatively slowly changing features of the surrounding urban environment.
 
 SENSOR ELIGIBILITY:
-Only sensors with a single recorded spatial location during 2025 and sufficient complete hourly observations will be included. Sensors that change location during the study year will be excluded.
+
+A pedestrian monitoring location is eligible for the main analysis if:
+
+1. it has one valid recorded spatial location during 2025;
+2. no within-year location change is detected;
+3. at least 90% of the expected hourly observations are available; and
+4. at least 300 complete 24-hour sensor-days remain after daily-data cleaning.
+
+Daily pedestrian totals will be calculated only from days containing all 24 hourly observations. Incomplete sensor-days will not be imputed for the primary analysis.
