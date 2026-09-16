@@ -1,0 +1,4 @@
+predictor,spearman_with_daily_mean
+mean_temp_c,0.19699681677456896
+max_temp_c,0.27316086684292823
+precipitation_mm,-0.33365648180771607
