@@ -1,0 +1,2 @@
+model,observations,sensors,dates,mean_deviance,effective_parameters_pD,DIC
+M4 Sensor-Day Hierarchical Negative Binomial,18671,53,364,348410.9146030296,370.01028581498844,348780.9248888446

@@ -1,0 +1,3 @@
+Mean deviance:  348411 
+penalty 370 
+Penalized deviance: 348781 
