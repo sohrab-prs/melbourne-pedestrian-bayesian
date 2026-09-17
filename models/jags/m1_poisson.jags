@@ -1,0 +1,70 @@
+model {
+
+  # ==========================================================
+  # PRIORS
+  # ==========================================================
+
+  # Baseline expected daily count on log scale
+  # Normal(log(10000), 0.5^2)
+  alpha ~ dnorm(9.210340, 4)
+
+  # ----------------------------------------------------------
+  # Day of week
+  #
+  # Monday is the reference category.
+  # ----------------------------------------------------------
+
+  beta_dow[1] <- 0
+
+  for (k in 2:7) {
+    beta_dow[k] ~ dnorm(0, 16)
+  }
+
+  # ----------------------------------------------------------
+  # Calendar / weather effects
+  #
+  # Normal(0, 0.25^2)
+  # ----------------------------------------------------------
+
+  beta_holiday ~ dnorm(0, 16)
+
+  beta_temp ~ dnorm(0, 16)
+
+  beta_rain ~ dnorm(0, 16)
+
+  # ----------------------------------------------------------
+  # Spatial effects
+  #
+  # Normal(0, 0.25^2)
+  # ----------------------------------------------------------
+
+  beta_business ~ dnorm(0, 16)
+
+  beta_population ~ dnorm(0, 16)
+
+  beta_coverage ~ dnorm(0, 16)
+
+  beta_height ~ dnorm(0, 16)
+
+  # ==========================================================
+  # POISSON LIKELIHOOD
+  # ==========================================================
+
+  for (n in 1:N) {
+
+    eta[n] <-
+      alpha +
+      beta_dow[dow[n]] +
+      beta_holiday * holiday[n] +
+      beta_temp * temp[n] +
+      beta_rain * rain[n] +
+      beta_business * business[n] +
+      beta_population * population[n] +
+      beta_coverage * coverage[n] +
+      beta_height * height[n]
+
+    log(mu[n]) <- eta[n]
+
+    y[n] ~ dpois(mu[n])
+  }
+}
