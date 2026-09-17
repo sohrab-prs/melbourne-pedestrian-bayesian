@@ -1,0 +1,71 @@
+model {
+
+  # ==========================================================
+  # PRIORS
+  # ==========================================================
+
+  alpha ~ dnorm(9.210340, 4)
+
+  # Monday reference
+  beta_dow[1] <- 0
+
+  for (k in 2:7) {
+    beta_dow[k] ~ dnorm(0, 16)
+  }
+
+  beta_holiday ~ dnorm(0, 16)
+
+  beta_temp ~ dnorm(0, 16)
+
+  beta_rain ~ dnorm(0, 16)
+
+  beta_business ~ dnorm(0, 16)
+
+  beta_population ~ dnorm(0, 16)
+
+  beta_coverage ~ dnorm(0, 16)
+
+  beta_height ~ dnorm(0, 16)
+
+  # ----------------------------------------------------------
+  # Negative Binomial dispersion
+  #
+  # log(phi) ~ Normal(log(10), 1^2)
+  # ----------------------------------------------------------
+
+  log_phi ~ dnorm(2.302585, 1)
+
+  phi <- exp(log_phi)
+
+  # ==========================================================
+  # NEGATIVE BINOMIAL LIKELIHOOD
+  # ==========================================================
+
+  for (n in 1:N) {
+
+    eta[n] <-
+      alpha +
+      beta_dow[dow[n]] +
+      beta_holiday * holiday[n] +
+      beta_temp * temp[n] +
+      beta_rain * rain[n] +
+      beta_business * business[n] +
+      beta_population * population[n] +
+      beta_coverage * coverage[n] +
+      beta_height * height[n]
+
+    log(mu[n]) <- eta[n]
+
+    prob[n] <-
+      phi /
+      (
+        phi +
+        mu[n]
+      )
+
+    y[n] ~ dnegbin(
+      prob[n],
+      phi
+    )
+  }
+}
