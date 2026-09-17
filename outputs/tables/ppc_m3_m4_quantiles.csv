@@ -1,0 +1,19 @@
+model,probability,replicated_q025,replicated_median,replicated_q975,observed_quantile
+M3 Hierarchical Negative Binomial,0.01,1696.0700000000002,1765.2000000000003,1823.5250000000003,1807
+M3 Hierarchical Negative Binomial,0.05,2899,2950.5,3005.0625,2902
+M3 Hierarchical Negative Binomial,0.1,3739.95,3794,3854.1000000000004,3713
+M3 Hierarchical Negative Binomial,0.25,5935.9125,6006,6077.6,5798
+M3 Hierarchical Negative Binomial,0.5,10110.85,10198,10304.05,10495
+M3 Hierarchical Negative Binomial,0.75,16299.8625,16483,16659.6875,16430
+M3 Hierarchical Negative Binomial,0.9,26135.85,26511.5,26928.85,27166
+M3 Hierarchical Negative Binomial,0.95,33304.275,33875,34434.137500000004,33262.5
+M3 Hierarchical Negative Binomial,0.99,46785.38249999999,47915.149999999994,49114.88499999999,44735.499999999985
+M4 Sensor-Day Hierarchical Negative Binomial,0.01,1707.6499999999999,1765.9499999999998,1826.5575000000001,1807
+M4 Sensor-Day Hierarchical Negative Binomial,0.05,2887.475,2949.75,3006.525,2902
+M4 Sensor-Day Hierarchical Negative Binomial,0.1,3733.9249999999997,3789,3844.1000000000004,3713
+M4 Sensor-Day Hierarchical Negative Binomial,0.25,5930.5,5999,6064.0625,5798
+M4 Sensor-Day Hierarchical Negative Binomial,0.5,10114,10202,10280.025,10495
+M4 Sensor-Day Hierarchical Negative Binomial,0.75,16300.425,16474.25,16632.075,16430
+M4 Sensor-Day Hierarchical Negative Binomial,0.9,26164.425,26528.5,26960.4,27166
+M4 Sensor-Day Hierarchical Negative Binomial,0.95,33327.075,33867.75,34489.0125,33262.5
+M4 Sensor-Day Hierarchical Negative Binomial,0.99,46748.50249999998,47876.64999999998,49233.21499999999,44735.499999999985
