@@ -1,0 +1,113 @@
+model {
+
+  # ==========================================================
+  # PRIORS
+  # ==========================================================
+
+  alpha ~ dnorm(9.210340, 4)
+
+  # Monday reference
+  beta_dow[1] <- 0
+
+  for (k in 2:7) {
+    beta_dow[k] ~ dnorm(0, 16)
+  }
+
+  beta_holiday ~ dnorm(0, 16)
+
+  beta_temp ~ dnorm(0, 16)
+
+  beta_rain ~ dnorm(0, 16)
+
+  # ----------------------------------------------------------
+  # Sensor-level spatial effects
+  #
+  # Equivalent to four independent Normal(0, 0.25^2) priors.
+  # Multivariate form retained from validated recovery model.
+  # ----------------------------------------------------------
+
+  beta_spatial[1:4] ~ dmnorm(
+    mu_spatial[1:4],
+    Tau_spatial[1:4, 1:4]
+  )
+
+  beta_business   <- beta_spatial[1]
+  beta_population <- beta_spatial[2]
+  beta_coverage   <- beta_spatial[3]
+  beta_height     <- beta_spatial[4]
+
+  # Negative Binomial dispersion
+  log_phi ~ dnorm(2.302585, 1)
+
+  phi <- exp(log_phi)
+
+  # Sensor heterogeneity
+  sigma_sensor ~ dnorm(0, 4) T(0,)
+
+  tau_sensor <- pow(
+    sigma_sensor,
+    -2
+  )
+
+  # ==========================================================
+  # HIERARCHICALLY CENTRED SENSOR MODEL
+  # ==========================================================
+
+  for (j in 1:J) {
+
+    sensor_mean[j] <-
+      alpha +
+      beta_business *
+        business_sensor[j] +
+      beta_population *
+        population_sensor[j] +
+      beta_coverage *
+        coverage_sensor[j] +
+      beta_height *
+        height_sensor[j]
+
+    sensor_intercept[j] ~ dnorm(
+      sensor_mean[j],
+      tau_sensor
+    )
+
+    u_sensor[j] <-
+      sensor_intercept[j] -
+      sensor_mean[j]
+  }
+
+  # ==========================================================
+  # OBSERVATION MODEL
+  # ==========================================================
+
+  for (n in 1:N) {
+
+    eta[n] <-
+      sensor_intercept[
+        sensor[n]
+      ] +
+      beta_dow[
+        dow[n]
+      ] +
+      beta_holiday *
+        holiday[n] +
+      beta_temp *
+        temp[n] +
+      beta_rain *
+        rain[n]
+
+    log(mu[n]) <- eta[n]
+
+    prob[n] <-
+      phi /
+      (
+        phi +
+        mu[n]
+      )
+
+    y[n] ~ dnegbin(
+      prob[n],
+      phi
+    )
+  }
+}
