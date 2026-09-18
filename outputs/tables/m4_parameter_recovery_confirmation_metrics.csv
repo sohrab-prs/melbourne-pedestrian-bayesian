@@ -1,0 +1,11 @@
+metric,value
+maximum_rhat,1.0191939801284904
+minimum_ess,471.7061026045067
+core_95_coverage,0.9411764705882353
+core_parameters_covered,16
+maximum_absolute_standardized_error,2.018224492686588
+critical_variance_parameters_all_covered,1
+sensor_effect_correlation,0.9799742803734053
+sensor_effect_95_coverage,0.9811320754716981
+day_effect_correlation,0.9177171004867084
+day_effect_95_coverage,0.9560439560439561

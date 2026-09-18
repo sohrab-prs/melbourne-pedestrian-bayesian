@@ -1,0 +1,28 @@
+here() starts at /home/sohrab/projects/melbourne-pedestrian-bayes
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+Loading required package: coda
+Linked to JAGS 4.3.2
+Loaded modules: basemod,bugs
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Linked to JAGS 4.3.2
+Linked to JAGS 4.3.2
+Linked to JAGS 4.3.2
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Linked to JAGS 4.3.2
+Loaded modules: basemod,bugs
+Final M4 confirmation parameter-recovery experiment completed.

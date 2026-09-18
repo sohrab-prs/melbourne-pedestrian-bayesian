@@ -1061,9 +1061,12 @@ p_scenarios <- ggplot(
   ) +
   labs(
     title =
-      "M4 Population-Level Scenario Predictions",
+      "M4 Conditional Scenario Predictions for a Reference Sensor-Day",
     subtitle =
-      "Expected count conditional on sensor and day random effects equal to zero",
+      paste(
+        "Expected count with sensor and day random effects fixed at zero;",
+        "intervals reflect posterior uncertainty in the conditional mean"
+      ),
     x =
       "Expected daily pedestrian count",
     y =
