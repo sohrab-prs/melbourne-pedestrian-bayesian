@@ -1,3 +1,9 @@
+# Original Analysis Plan
+
+> **Historical note.** This document records the analysis plan before the final model-development stage. The initial plan reserved M4 for a possible spatial extension. During model checking, however, M3 reproduced persistent between-sensor variation well but under-reproduced shared date-level variability. This motivated the final M4 specification with both sensor and day random effects. Residual spatial diagnostics subsequently showed only weak remaining spatial dependence, so an additional spatial random-effect model was not fitted. The final methodology and results are documented in the project report.
+
+---
+
 PROJECT:
 Bayesian Hierarchical Modelling of Pedestrian Activity in Melbourne
 

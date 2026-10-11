@@ -7,8 +7,6 @@
 # and produce trace/autocorrelation diagnostics suitable for
 # the final report.
 #
-# This is a light post-processing step and should run locally.
-#
 # Outputs:
 #   outputs/tables/mcmc_diagnostics_summary.csv
 #   outputs/tables/mcmc_selected_autocorrelation.csv

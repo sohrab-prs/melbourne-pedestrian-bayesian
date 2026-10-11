@@ -1,0 +1,1398 @@
+---
+title: "Bayesian Hierarchical Modelling of Pedestrian Activity in Melbourne"
+subtitle: |
+  <style>
+
+    header#title-block-header {
+      background-color: #ffeebd;
+      padding-top: 1.0rem !important;
+      padding-bottom: 1.0rem !important;
+      padding-left: 1.5rem !important;
+      padding-right: 1.5rem !important;
+      border-radius: 8px;
+    }
+    .quarto-title-block .quarto-title-banner {
+      padding-top: 1.5rem !important;
+      padding-bottom: 1.5rem !important;
+    }
+
+    h1.title {
+      margin-bottom: 7px !important;
+    }
+  </style>
+  <div style="font-size: 1.3em; color: #374151; margin-bottom: 15px; font-weight: bold;">
+  A Fully Bayesian MCMC Analysis of Sensor-Day Counts, 2025
+  </div>
+  <div style="color: #111827; font-size: 1.05em; line-height: 1.4;">
+  <strong>Name & Surname: Sohrab Seyyedi Parsa</strong><br>
+  <strong>Matricola: 2101087</strong><br>
+  <strong>Email:</strong> <a href="mailto:seyyediparsa.2101087@studenti.uniroma1.it">seyyediparsa.2101087@studenti.uniroma1.it</a>
+  </div>
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    number-sections: false
+    smooth-scroll: true
+    embed-resources: true
+    theme: cosmo
+    page-layout: full
+    css: report_style.css
+    fig-align: center
+    df-print: paged
+execute:
+  echo: false
+  warning: false
+  message: false
+bibliography: references.bib
+link-citations: true
+---
+
+```{r}
+#| label: setup
+
+options(
+  scipen = 999,
+  digits = 4
+)
+
+# Resolve the project root whether Quarto is rendered from the repository root
+# or from the report/ directory.
+root <- if (file.exists("data/processed/modelling_dataset_selected_2025.csv")) {
+  "."
+} else if (file.exists("../data/processed/modelling_dataset_selected_2025.csv")) {
+  ".."
+} else {
+  "."
+}
+
+p <- function(...) file.path(root, ...)
+
+safe_csv <- function(...) {
+  f <- p(...)
+  if (file.exists(f)) {
+    read.csv(f, check.names = FALSE)
+  } else {
+    NULL
+  }
+}
+
+options(knitr.kable.NA = "")
+
+safe_num <- function(x, fallback = NA_real_) {
+  if (length(x) == 0 || all(is.na(x))) fallback else as.numeric(x[1])
+}
+
+fmt0 <- function(x) format(round(x), big.mark = ",", scientific = FALSE)
+fmt1 <- function(x) format(round(x, 1), big.mark = ",", scientific = FALSE)
+fmt2 <- function(x) format(round(x, 2), big.mark = ",", scientific = FALSE)
+fmt3 <- function(x) format(round(x, 3), big.mark = ",", scientific = FALSE)
+
+include_figure <- function(rel_path, alt = NULL) {
+  f <- p(rel_path)
+  if (file.exists(f)) {
+    knitr::include_graphics(f)
+  } else {
+    cat(sprintf("\n*Figure file not found at render time: `%s`.*\n", rel_path))
+  }
+}
+
+include_first_matching_figure <- function(pattern, dirs = c("outputs/figures", "outputs/maps")) {
+  found <- character()
+  for (d in dirs) {
+    dd <- p(d)
+    if (dir.exists(dd)) {
+      found <- c(found, list.files(dd, pattern = pattern, full.names = TRUE, ignore.case = TRUE))
+    }
+  }
+  found <- unique(found)
+  if (length(found) > 0) {
+    knitr::include_graphics(found[1])
+  } else {
+    cat(sprintf("\n*No figure matching `%s` was found at render time.*\n", pattern))
+  }
+}
+
+kable_clean <- function(x, caption = NULL, digits = 3) {
+  knitr::kable(
+    x,
+    format = "html",
+    caption = caption,
+    digits = digits,
+    row.names = FALSE,
+    table.attr = 'class="table table-striped table-hover report-table"'
+  )
+}
+
+model_dat <- safe_csv("data", "processed", "modelling_dataset_selected_2025.csv")
+effects <- safe_csv("outputs", "tables", "m4_final_effect_estimates.csv")
+variance_pars <- safe_csv("outputs", "tables", "m4_variance_parameters.csv")
+model_comp <- safe_csv("outputs", "tables", "model_comparison_final.csv")
+mcmc_diag <- safe_csv("outputs", "tables", "mcmc_diagnostics_summary_final.csv")
+prior_pp <- safe_csv("outputs", "tables", "m4_prior_predictive_summary.csv")
+recovery1 <- safe_csv("outputs", "tables", "m4_parameter_recovery_metrics.csv")
+recovery2 <- safe_csv("outputs", "tables", "m4_parameter_recovery_confirmation_metrics.csv")
+freq_cmp <- safe_csv("outputs", "tables", "bayesian_frequentist_comparison.csv")
+freq_disp <- safe_csv("outputs", "tables", "bayesian_frequentist_dispersion.csv")
+freq_vc <- safe_csv("outputs", "tables", "frequentist_variance_components.csv")
+scenario_pred <- safe_csv("outputs", "tables", "m4_scenario_predictions.csv")
+sensor_pred <- safe_csv("outputs", "tables", "m4_sensor_reference_predictions.csv")
+sensor_re_extremes <- safe_csv("outputs", "tables", "report_m4_sensor_random_effect_extremes.csv")
+
+n_obs <- if (!is.null(model_dat)) nrow(model_dat) else 18671L
+n_sensors <- if (!is.null(model_dat) && "sensor_index" %in% names(model_dat)) length(unique(model_dat$sensor_index)) else 53L
+n_dates <- if (!is.null(model_dat) && "date" %in% names(model_dat)) length(unique(model_dat$date)) else 364L
+
+if (!is.null(model_dat) && "daily_ped_count" %in% names(model_dat)) {
+  y <- model_dat$daily_ped_count
+  y_mean <- mean(y)
+  y_median <- median(y)
+  y_sd <- sd(y)
+  y_min <- min(y)
+  y_max <- max(y)
+  y_q1 <- unname(quantile(y, .25))
+  y_q3 <- unname(quantile(y, .75))
+  y_q95 <- unname(quantile(y, .95))
+  y_vmr <- var(y) / mean(y)
+} else {
+  y_mean <- 12974
+  y_median <- 10495
+  y_sd <- 9631
+  y_min <- 1118
+  y_max <- 64683
+  y_q1 <- 5798
+  y_q3 <- 16430
+  y_q95 <- 33262
+  y_vmr <- 7149
+}
+
+get_effect <- function(label, field, fallback) {
+  if (!is.null(effects) && all(c("effect", field) %in% names(effects))) {
+    z <- effects[effects$effect == label, field]
+    if (length(z) > 0) return(safe_num(z, fallback))
+  }
+  fallback
+}
+
+fri_pct <- get_effect("Friday vs Monday", "percent_change_median", 22.4)
+holiday_pct <- get_effect("Public holiday", "percent_change_median", -12.6)
+rain_pct <- get_effect("log(1 + precipitation) (+1 SD)", "percent_change_median", -5.13)
+coverage_pct <- get_effect("Built coverage within 500 m (+1 SD)", "percent_change_median", 26.7)
+height_pct <- get_effect("Median structure height within 500 m (+1 SD)", "percent_change_median", 20.6)
+
+get_var <- function(param, field, fallback) {
+  if (!is.null(variance_pars) && all(c("parameter", field) %in% names(variance_pars))) {
+    z <- variance_pars[variance_pars$parameter == param, field]
+    if (length(z) > 0) return(safe_num(z, fallback))
+  }
+  fallback
+}
+
+phi_med <- get_var("phi", "median", 13.8)
+sigma_sensor_med <- get_var("sigma_sensor", "median", 0.601)
+sigma_day_med <- get_var("sigma_day", "median", 0.0963)
+```
+
+# Overview
+
+## Abstract
+
+**Background:** Pedestrian activity is highly heterogeneous across central Melbourne. Counts vary by day of week, weather, public holidays, and persistent differences between monitoring locations. A statistical model for these data therefore needs to handle both count overdispersion and repeated observations within sensors and calendar dates.
+
+**Objective:** This study evaluates how temporal conditions and characteristics of the surrounding urban environment are associated with daily pedestrian activity at City of Melbourne monitoring locations, while quantifying unexplained sensor- and day-level heterogeneity.
+
+**Methods:** Hourly pedestrian counts for 2025 were aggregated to complete sensor-days after applying pre-specified sensor eligibility rules. The final analysis contains `r fmt0(n_obs)` sensor-days from `r n_sensors` sensors over `r n_dates` represented dates. Urban context was measured within 500 m buffers using City of Melbourne CLUE and building data together with 2021 Census population information. Four Bayesian count models were fitted in JAGS: Poisson (M1), Negative Binomial (M2), hierarchical Negative Binomial with sensor random effects (M3), and hierarchical Negative Binomial with both sensor and day random effects (M4). Models were assessed using MCMC diagnostics, Deviance Information Criterion (DIC), posterior predictive checks (PPC), prior predictive checks, simulated-data parameter recovery, and residual spatial diagnostics. A frequentist Negative Binomial mixed model was fitted as an additional sensitivity analysis.
+
+**Results:** Strong overdispersion made the Poisson model inadequate. DIC decreased from 89,255,259 (M1) to 380,409 (M2), 350,594 (M3), and 348,781 (M4). M3 reproduced between-sensor heterogeneity but under-reproduced shared date-level variability; adding a day random effect in M4 increased date-mean PPC coverage from 65.7% to 99.5% while preserving 100% sensor-mean coverage. Under M4, Tuesday-Saturday counts were higher than Monday, public holidays were associated with lower counts, and precipitation had a robust negative association. Spatial built-environment coefficients were more uncertain once persistent sensor heterogeneity was accounted for. The final confirmation parameter-recovery experiment passed all pre-specified convergence and recovery criteria.
+
+**Conclusion:** Daily pedestrian activity in Melbourne is not adequately represented by a simple Poisson process or by overdispersion alone. The preferred fitted model requires both Negative Binomial observation variance and hierarchical sensor- and date-level structure. The analysis provides evidence of strong temporal patterning and substantial persistent location heterogeneity, while estimates for several urban-environment characteristics remain uncertain and should be interpreted as observational associations rather than causal effects.
+
+**Keywords:** pedestrian activity; Bayesian inference; Negative Binomial; hierarchical model; MCMC; JAGS; posterior predictive checks; urban analytics; Melbourne
+
+## Main Finding
+
+::: {.callout-important}
+### Preferred model
+
+The **sensor-day hierarchical Negative Binomial model (M4)** is preferred among the fitted candidates because it combines the lowest DIC with the strongest reproduction of the two dominant data structures: persistent differences between sensors and common variation across dates.
+
+The model estimates substantial sensor heterogeneity ($\sigma_{\text{sensor}} = `r fmt3(sigma_sensor_med)`$) and smaller but clearly non-zero shared day heterogeneity ($\sigma_{\text{day}} = `r fmt3(sigma_day_med)`$). The Negative Binomial dispersion is $\phi = `r fmt1(phi_med)`$.
+:::
+
+## Introduction
+
+### Background
+
+The City of Melbourne pedestrian counting system records pedestrian movements continuously at fixed monitoring locations. These data are useful for understanding how activity varies across locations and through time, but repeated measurements at the same sensors create a hierarchical structure that ordinary independent count models do not capture. Sensor location also matters because the monitoring network is concentrated in places with regular pedestrian activity rather than representing a random spatial sample of the municipality [@cityPedCounts; @citySensorLocations].
+
+Daily counts are additionally affected by recurring calendar patterns, weather, holidays, and unmeasured day-specific shocks. At the location level, surrounding business activity, residential population and built form may also be associated with pedestrian volumes. A modelling framework therefore needs to distinguish observation-level overdispersion from persistent sensor heterogeneity and shared day-level variation.
+
+### Research Gap
+
+Simple descriptive summaries can show where and when pedestrian activity is high, but they do not separate the multiple sources of variation in repeated sensor data. In particular, a non-hierarchical model can make location-level covariates appear more precisely estimated than they are because thousands of sensor-day observations do not constitute thousands of independent locations.
+
+This project uses a fully Bayesian workflow to compare increasingly structured count models and to test, through posterior predictive checks, which additional components are needed to reproduce the observed data.
+
+## Research Questions
+
+The primary research question is:
+
+> **How do temporal conditions and characteristics of the surrounding urban environment explain variation in pedestrian activity across central Melbourne, and how much unexplained heterogeneity remains between pedestrian monitoring locations?**
+
+Secondary questions are:
+
+1. Does a Negative Binomial likelihood reproduce the data better than a Poisson likelihood?
+2. Does accounting for persistent sensor-level heterogeneity materially improve model fit and uncertainty quantification?
+3. After sensor heterogeneity is included, is there remaining shared day-level structure that warrants a day random effect?
+4. Does the final model leave consequential residual spatial dependence between sensor effects?
+5. Are the main Bayesian estimates broadly consistent with an analogous frequentist Negative Binomial mixed model?
+
+The inferential targets are the temporal and urban-environment regression coefficients, the Negative Binomial dispersion parameter $\phi$, the sensor random-effect standard deviation $\sigma_{\text{sensor}}$, the day random-effect standard deviation $\sigma_{\text{day}}$, and posterior predictions for representative sensor-day conditions.
+
+# Data and EDA
+
+## Dataset Inventory
+
+The analysis combines pedestrian counts with temporal, weather, demographic, land-use and built-environment context. Contextual variables come from the most recent suitable datasets available during project construction; the different reference years are documented rather than treated as contemporaneous measurements.
+
+```{r}
+#| label: tbl-dataset-inventory
+
+inventory <- data.frame(
+  Source = c(
+    "City of Melbourne Pedestrian Counting System",
+    "Pedestrian sensor locations",
+    "CLUE business establishments",
+    "CLUE residential dwellings",
+    "City of Melbourne building footprints",
+    "ABS Census population/context",
+    "Open-Meteo ERA5 weather",
+    "Victorian public-holiday calendar"
+  ),
+  `Reference year` = c("2025", "2025 register", "2024", "2024", "2023 published layer", "2021", "2025", "2025"),
+  `Role in analysis` = c(
+    "Hourly response data",
+    "Sensor coordinates and location stability",
+    "Business count / business context within 500 m",
+    "Residential context and screening",
+    "Built coverage and structure height within 500 m",
+    "Resident population and socioeconomic screening",
+    "Daily temperature and precipitation",
+    "Public-holiday indicator"
+  ),
+  check.names = FALSE
+)
+
+kable_clean(inventory, "Data sources and analytical roles.")
+```
+
+The hourly count dataset records pedestrian observations from sensor devices across Melbourne and is explicitly designed to be joined to the sensor-location dataset by sensor ID [@cityPedCounts; @citySensorLocations]. The 2023 Building Footprints layer represents the base geometry of structures within the City of Melbourne [@cityBuildings]. ABS 2021 Census DataPacks provide small-area demographic information [@abs2021].
+
+### Temporal alignment
+
+The pedestrian response, weather and calendar indicators refer to 2025. CLUE business and dwelling measures use 2024 data; building-footprint context uses the City of Melbourne's 2023 published layer; and population context uses the 2021 Census. These lags are acceptable for comparatively slow-changing urban context but are a limitation when interpreting coefficients as representing exact 2025 conditions.
+
+## Unit of Analysis
+
+The modelling unit is **sensor × calendar day**. Hourly counts are summed only when all 24 hourly observations are present for that sensor-day. Incomplete days are excluded rather than imputed in the primary analysis.
+
+The response is
+
+$$
+Y_{it} = \text{daily pedestrian count for sensor } i \text{ on date } t.
+$$
+
+This produces a non-negative count outcome suited to Poisson and Negative Binomial likelihoods.
+
+## Sensor Eligibility and Filtering
+
+The primary eligibility rules were fixed before model fitting:
+
+- a valid 2025 spatial location;
+- no within-year sensor relocation;
+- at least 90% hourly observation coverage during 2025;
+- at least 300 complete 24-hour days;
+- no primary imputation for incomplete days.
+
+The raw 2025 count file contained approximately 815,447 hourly records and 102 sensor IDs. After location and coverage checks, the locked modelling dataset contains `r n_sensors` sensors and `r fmt0(n_obs)` complete sensor-days.
+
+```{r}
+#| label: tbl-sensor-attrition
+
+attrition <- data.frame(
+  Stage = c(
+    "Raw 2025 sensor IDs",
+    "Valid geolocation and stable 2025 location",
+    "At least 90% hourly observation coverage",
+    "At least 300 complete 24-hour days"
+  ),
+  Sensors = c(102, 100, 77, 53),
+  `Retained from raw` = sprintf(
+    "%.1f%%",
+    100 * c(102, 100, 77, 53) / 102
+  ),
+  check.names = FALSE
+)
+
+kable_clean(
+  attrition,
+  "Sensor attrition under the pre-specified eligibility rules."
+)
+```
+
+The largest reduction occurs when the hourly-completeness requirement is imposed. The final 53-sensor network therefore reflects a deliberate quality-control rule rather than arbitrary case removal, and the same locked sensor set is used throughout the primary modelling workflow.
+
+## Final Sample
+
+```{r}
+#| label: tbl-response-summary
+
+response_summary <- data.frame(
+  Statistic = c(
+    "Sensor-days", "Sensors", "Represented dates", "Minimum", "First quartile",
+    "Median", "Mean", "Third quartile", "95th percentile", "Maximum", "Variance / mean"
+  ),
+  Value = c(
+    fmt0(n_obs), n_sensors, n_dates, fmt0(y_min), fmt0(y_q1), fmt0(y_median),
+    fmt0(y_mean), fmt0(y_q3), fmt0(y_q95), fmt0(y_max), fmt1(y_vmr)
+  )
+)
+
+kable_clean(response_summary, "Final daily pedestrian-count dataset.")
+```
+
+The variance-to-mean ratio is approximately `r fmt1(y_vmr)`, demonstrating extreme overdispersion relative to a Poisson distribution. Daily counts are far from zero, so zero inflation was not a relevant feature of the response.
+
+## Spatial Context and 500 m Catchments
+
+Each retained sensor was represented in projected coordinates and assigned a 500 m Euclidean circular catchment. The 500 m distance was chosen as the primary local walking-scale context. Spatial covariates were aggregated within these catchments.
+
+The primary urban-environment variables are:
+
+- business establishments within 500 m;
+- resident population within 500 m;
+- built coverage within 500 m;
+- median structure height within 500 m.
+
+Additional candidate variables—including dwelling count, income context and business-mix entropy—were retained during data preparation but excluded from the primary model after predictor screening.
+
+```{r}
+#| label: fig-spatial-overview
+#| fig-cap: "Retained pedestrian sensors and 500 m analytical catchments within the City of Melbourne municipal boundary. Background: City of Melbourne light basemap."
+
+include_figure("outputs/figures/report_sensor_catchments_map.png")
+```
+
+The retained sensors are concentrated in the central and inner-city activity areas rather than distributed uniformly across the municipality. The overlapping 500 m catchments also show that neighbouring sensors can share substantial surrounding urban context; this motivates cautious interpretation of location-level coefficients and the later residual spatial diagnostic.
+
+## Predictor Screening
+
+Predictor selection was performed before fitting the primary models to avoid redundant parameterizations. Mean temperature was retained over maximum temperature; day of week was retained rather than a redundant weekend indicator; resident population was retained over dwelling count; and business count, built coverage and median structure height were retained as the main spatial predictors. Business-mix entropy and income context were not included in the primary specification.
+
+Continuous spatial covariates were standardized using the `r n_sensors` unique sensors, rather than the repeated sensor-day rows. Weather covariates were standardized across calendar dates. This prevents sensors with more observations from implicitly receiving greater weight in the definition of a one-standard-deviation spatial change.
+
+```{r}
+#| label: fig-predictor-correlation
+#| fig-cap: "Correlation structure among the main candidate spatial and contextual predictors used during screening."
+
+include_figure("outputs/figures/report_spatial_correlation_heatmap.png")
+```
+
+Several candidate urban-context variables are moderately to strongly correlated, particularly measures describing residential or built intensity. This supports the pre-model screening decisions to avoid simultaneously including redundant predictors such as dwelling count with resident population, while retaining a smaller set of variables with distinct substantive interpretations.
+
+## Exploratory Patterns
+
+The exploratory analysis focuses on features that directly motivate the hierarchical count-model sequence: response skewness and overdispersion, recurring calendar structure, within-year variation, persistent differences between sensors, and descriptive relationships with the spatial predictors.
+
+### Response distribution
+
+```{r}
+#| label: fig-eda-response
+#| fig-cap: "Distribution of daily pedestrian counts in the final analysis sample; the dashed line denotes the median."
+
+include_figure("outputs/figures/report_eda_daily_counts.png")
+```
+
+The response is strongly right-skewed, with a long upper tail and variance far exceeding the mean. This is the first indication that a Poisson likelihood will be too restrictive.
+
+### Day-of-week pattern
+
+```{r}
+#| label: fig-eda-weekday
+#| fig-cap: "Observed mean daily pedestrian activity by day of week."
+
+include_figure("outputs/figures/report_eda_day_of_week.png")
+```
+
+Observed activity rises from Monday through the working week, is highest around Friday, remains elevated on Saturday, and drops sharply on Sunday. This recurring pattern motivates explicit day-of-week effects rather than a single weekend indicator.
+
+### Within-year temporal variation
+
+```{r}
+#| label: fig-eda-temporal-trend
+#| fig-cap: "Network-wide mean pedestrian activity through 2025. The darker line is a centered 14-observation moving average."
+
+include_figure("outputs/figures/report_eda_temporal_trend.png")
+```
+
+Beyond the regular weekday cycle, network-wide activity changes materially through the year. This descriptive temporal variation is consistent with the later posterior predictive finding that a shared date-level effect is needed in addition to measured weather and calendar covariates.
+
+### Between-sensor variation
+
+```{r}
+#| label: fig-eda-sensor-means
+#| fig-cap: "Variation in mean daily pedestrian activity across retained sensors."
+
+include_figure("outputs/figures/report_eda_sensor_means.png")
+```
+
+Average activity differs by more than an order of magnitude across the retained sensors. These persistent differences are a direct motivation for the sensor hierarchy introduced in M3 and retained in M4.
+
+### Bivariate spatial relationships
+
+```{r}
+#| label: fig-eda-spatial-bivariate
+#| fig-cap: "Unadjusted sensor-level relationships between mean pedestrian activity and the four primary standardized urban-context predictors."
+
+include_figure("outputs/figures/report_eda_spatial_bivariate.png")
+```
+
+The sensor-level plots show substantial scatter around the unadjusted trends. They are therefore descriptive rather than inferential: apparent bivariate associations can change once the spatial predictors, temporal covariates and persistent sensor effects are estimated jointly.
+
+Taken together, the EDA motivates the model sequence: first test whether Poisson sampling is adequate, then add Negative Binomial overdispersion, then account for persistent between-sensor heterogeneity, and finally test whether residual shared temporal structure requires a day effect.
+
+# Models and Priors
+
+## Model Roadmap
+
+The four fitted Bayesian models form a deliberate sequence. M4 was **not pre-specified as the original final model**; it was added after M3 posterior predictive checks identified a specific remaining deficiency in shared date-level variability. This model-development chronology is reported explicitly rather than presenting M4 as if it had been chosen in advance.
+
+```{r}
+#| label: tbl-model-roadmap
+
+roadmap <- data.frame(
+  Model = c("M1", "M2", "M3", "M4"),
+  Likelihood = c("Poisson", "Negative Binomial", "Negative Binomial", "Negative Binomial"),
+  Hierarchy = c("None", "None", "Sensor random effect", "Sensor + day random effects"),
+  `Question addressed` = c(
+    "Is Poisson variance adequate?",
+    "Does observation-level overdispersion improve fit?",
+    "Is there persistent unexplained sensor heterogeneity?",
+    "Is there residual shared day-level variation after M3?"
+  ),
+  check.names = FALSE
+)
+
+kable_clean(roadmap, "Bayesian model sequence.")
+```
+
+## Common Notation
+
+For sensor $i$ and date $t$:
+
+- $Y_{it}$: observed complete-day pedestrian count;
+- $\mu_{it}$: expected daily count;
+- $\alpha$: baseline log expected count;
+- $\boldsymbol\beta_T$: temporal/weather coefficients;
+- $\boldsymbol\beta_S$: sensor-level urban-context coefficients;
+- $\phi$: Negative Binomial dispersion parameter;
+- $u_i$: sensor random effect;
+- $v_t$: date random effect.
+
+Monday is the reference day of week. All continuous predictors appearing with a `z_` prefix are standardized.
+
+## M1: Poisson
+
+$$
+Y_{it} \sim \text{Poisson}(\mu_{it})
+$$
+
+$$
+\log \mu_{it} = \alpha + \mathbf{x}_{T,it}^{\top}\boldsymbol\beta_T +
+\mathbf{x}_{S,i}^{\top}\boldsymbol\beta_S.
+$$
+
+M1 assumes $\mathrm{Var}(Y_{it}) = \mu_{it}$. Given the observed variance-to-mean ratio, it serves primarily as a deliberately simple baseline.
+
+## M2: Negative Binomial
+
+$$
+Y_{it} \sim \text{NegBin}(\mu_{it}, \phi),
+$$
+
+with
+
+$$
+\mathrm{Var}(Y_{it}) = \mu_{it} + \frac{\mu_{it}^{2}}{\phi}.
+$$
+
+The linear predictor is unchanged from M1. M2 asks whether extra observation-level variation beyond Poisson sampling is sufficient to describe the data.
+
+## M3: Hierarchical Negative Binomial
+
+M3 adds persistent sensor-level heterogeneity. For computational efficiency the model was fitted using a hierarchically centered parameterization:
+
+$$
+a_i \sim N\left(\alpha + \mathbf{x}_{S,i}^{\top}\boldsymbol\beta_S,\; \sigma_{\text{sensor}}^{2}\right),
+$$
+
+$$
+\log \mu_{it} = a_i + \mathbf{x}_{T,it}^{\top}\boldsymbol\beta_T.
+$$
+
+This is statistically equivalent to writing a fixed spatial predictor plus a zero-centered sensor random intercept, but it improved MCMC mixing and efficiency in JAGS.
+
+## M4: Sensor-Day Hierarchical Negative Binomial
+
+M3 posterior predictive checks showed that between-sensor structure was reproduced well but common date-to-date variability remained too small. M4 therefore adds a shared day effect:
+
+$$
+v_t \sim N(0,\sigma_{\text{day}}^{2}),
+$$
+
+$$
+\log \mu_{it} = a_i + \mathbf{x}_{T,it}^{\top}\boldsymbol\beta_T + v_t.
+$$
+
+M4 separates three distinct sources of variation:
+
+1. Negative Binomial observation-level overdispersion through $\phi$;
+2. persistent sensor heterogeneity through $\sigma_{\text{sensor}}$;
+3. shared date-level heterogeneity through $\sigma_{\text{day}}$.
+
+## Prior Specification
+
+The final priors are weakly informative on the log-count scale:
+
+```{r}
+#| label: tbl-priors
+
+priors <- data.frame(
+  Parameter = c("alpha", "all beta coefficients", "log(phi)", "sigma_sensor", "sigma_day"),
+  Prior = c(
+    "Normal(log(10000), 0.5^2)",
+    "Normal(0, 0.25^2)",
+    "Normal(log(10), 1^2)",
+    "Half-Normal(0, 0.5)",
+    "Half-Normal(0, 0.5)"
+  ),
+  Interpretation = c(
+    "Baseline daily count centered near 10,000",
+    "Regularizes multiplicative covariate effects toward modest values",
+    "Broad prior for Negative Binomial dispersion",
+    "Positive prior for between-sensor log-scale heterogeneity",
+    "Positive prior for common day-level log-scale heterogeneity"
+  )
+)
+
+kable_clean(priors, "Prior distributions used in the final Bayesian model sequence.")
+```
+
+### Prior Predictive Checks
+
+The final M4 prior-predictive distribution was evaluated using 300 simulated datasets under the actual 18,671-row sensor-day design. The priors had already been fixed and were not subsequently retuned in response to posterior results. The observed mean, median, 95th percentile, maximum and variance-to-mean ratio all fell inside their corresponding 95% prior-predictive ranges. The prior is intentionally broad: some simulations generate very large upper-tail counts, but the observed dataset lies within the prior-predictive support.
+
+```{r}
+#| label: tbl-prior-ppc
+
+if (!is.null(prior_pp)) {
+  pp <- prior_pp
+
+  stat_labels <- c(
+    maximum_count = "Maximum count",
+    mean_count = "Mean count",
+    median_count = "Median count",
+    proportion_gt_100000 = "Proportion > 100,000",
+    proportion_gt_1000000 = "Proportion > 1,000,000",
+    q95_count = "95th percentile",
+    variance_to_mean = "Variance / mean"
+  )
+
+  observed_lookup <- c(
+    maximum_count = y_max,
+    mean_count = y_mean,
+    median_count = y_median,
+    proportion_gt_100000 = mean(y > 100000),
+    proportion_gt_1000000 = mean(y > 1000000),
+    q95_count = y_q95,
+    variance_to_mean = y_vmr
+  )
+
+  pp$observed <- unname(observed_lookup[pp$statistic])
+
+  fmt_pp <- function(value, statistic) {
+    ifelse(
+      grepl("^proportion", statistic),
+      sprintf("%.3f", value),
+      format(round(value), big.mark = ",", scientific = FALSE, trim = TRUE)
+    )
+  }
+
+  out <- data.frame(
+    Statistic = unname(stat_labels[pp$statistic]),
+    `Prior 2.5%` = fmt_pp(pp$prior_q025, pp$statistic),
+    `Prior median` = fmt_pp(pp$prior_median, pp$statistic),
+    `Prior 97.5%` = fmt_pp(pp$prior_q975, pp$statistic),
+    Observed = fmt_pp(pp$observed, pp$statistic),
+    check.names = FALSE
+  )
+
+  kable_clean(out, "Final M4 prior-predictive summary.")
+} else {
+  cat("*Prior-predictive summary table not found at render time.*")
+}
+```
+
+```{r}
+#| label: fig-prior-ppc
+#| fig-cap: "Final M4 prior-predictive distributions under the actual sensor-day design."
+
+include_figure("outputs/figures/report_m4_prior_predictive.png")
+```
+
+# Computation and Recovery
+
+## MCMC Settings
+
+All Bayesian models were fitted with JAGS through `rjags` [@plummer2003jags]. Four chains were used for posterior inference. Thinning was one throughout; retained sample size was increased rather than thinning when additional effective samples were required.
+
+```{r}
+#| label: tbl-mcmc-settings
+
+mcmc_settings <- data.frame(
+  Model = c("M1", "M2", "M3", "M4 final"),
+  Chains = c(4, 4, 4, 4),
+  Adaptation = c(1000, 1000, 1500, 1000),
+  `Burn-in` = c(2000, 1500, 2000, 1500),
+  `Retained iterations / chain` = c(4000, 4000, 3500, 7000),
+  Thinning = c(1, 1, 1, 1),
+  check.names = FALSE
+)
+
+kable_clean(mcmc_settings, "Posterior MCMC settings for the accepted fits.")
+```
+
+M4 was initially run with 3,000 retained iterations per chain. That run met the broad convergence criterion but failed the pre-specified minimum ESS requirement. The convergence threshold was **not relaxed**. Instead, the posterior run was extended to 7,000 retained iterations per chain, after which all pre-specified criteria passed.
+
+## Hierarchical Centering
+
+Initial experimentation showed that the sensor hierarchy mixed much more efficiently when the sensor intercept was centered on the fixed spatial linear predictor. The final hierarchical form therefore samples each sensor intercept around
+
+$$
+\alpha + \beta_{business}B_i + \beta_{population}P_i +
+\beta_{coverage}C_i + \beta_{height}H_i,
+$$
+
+rather than sampling a strongly correlated global intercept and independent sensor deviations in a less efficient geometry.
+
+This was an MCMC parameterization change, not a change to the inferential model.
+
+## MCMC Diagnostics
+
+The pre-specified acceptance criteria were maximum $\hat R < 1.05$ and minimum effective sample size (ESS) of at least 400 for monitored parameters. These criteria follow the general principle that multiple-chain diagnostics should show approximate stationarity and adequate effective information before posterior summaries are interpreted [@vehtari2021rhat].
+
+```{r}
+#| label: tbl-mcmc-diagnostics
+
+if (!is.null(mcmc_diag)) {
+  out <- data.frame(
+    Model = mcmc_diag$model,
+    Parameters = mcmc_diag$parameters_checked,
+    `Max R-hat` = round(mcmc_diag$max_rhat, 3),
+    `Min ESS` = round(mcmc_diag$min_ess),
+    `Median ESS` = round(mcmc_diag$median_ess),
+    Status = ifelse(mcmc_diag$convergence_pass, "PASS", "CHECK"),
+    check.names = FALSE
+  )
+  kable_clean(out, "Final MCMC diagnostic summary for M1-M4.", digits = 3)
+} else {
+  diag_fallback <- data.frame(
+    Model = c("M1", "M2", "M3", "M4"),
+    `Max R-hat` = c(1.004, 1.004, 1.001, 1.019),
+    `Min ESS` = c(703, 759, 1159, 444),
+    Status = "PASS"
+  )
+  kable_clean(diag_fallback, "Final MCMC diagnostic summary for M1-M4.")
+}
+```
+
+```{r}
+#| label: fig-m4-trace
+#| fig-cap: "Selected trace plots for the final M4 posterior fit."
+
+include_figure("outputs/figures/report_mcmc_trace_m4.png")
+```
+
+The representative M4 traces show overlapping chains without persistent separation or long-lived drift. Together with the numerical $\hat R$ and ESS criteria in @tbl-mcmc-diagnostics, this supports using the retained posterior draws for inference.
+
+## Parameter Recovery
+
+Parameter recovery asks whether the complete Bayesian fitting procedure can recover known parameters from synthetic data generated under the model. The final M4 validation used the **actual observation structure**: `r fmt0(n_obs)` rows, `r n_sensors` sensors, `r n_dates` represented dates, and the observed predictor matrix. Synthetic responses were generated from known fixed effects, $\phi$, $\sigma_{\text{sensor}}$, $\sigma_{\text{day}}$, sensor effects and day effects, then the unchanged M4 JAGS model was refitted.
+
+### Initial full-design recovery replicate
+
+The first full-design M4 recovery fit converged (maximum $\hat R=1.029$, minimum ESS approximately 480) and strongly recovered the latent structure: sensor-effect correlation was 0.994 with 100% interval coverage; day-effect correlation was 0.913 with 95.6% coverage; and $\phi$, $\sigma_{\text{sensor}}$ and $\sigma_{\text{day}}$ were all covered. Fourteen of 17 core parameters were covered by their nominal 95% intervals, narrowly missing the pre-specified 15/17 rule.
+
+A diagnostic conducted **without changing the model or acceptance threshold** showed that the missed weekday coefficients were explained by the particular finite realization of the simulated day effects. The correlation between weekday posterior bias and the realized weekday-vs-Monday day-effect contrast was 0.952; the simulated holiday contrast similarly matched the posterior holiday bias.
+
+### Independent confirmation replicate
+
+A second, independently seeded recovery replicate was pre-specified as the single confirmation experiment. No model, prior, true parameter, MCMC setting or acceptance threshold was changed.
+
+```{r}
+#| label: tbl-recovery-confirmation
+
+if (!is.null(recovery2)) {
+  metric_lookup <- c(
+    maximum_rhat = "Maximum R-hat",
+    minimum_ess = "Minimum ESS",
+    core_95_coverage = "Core 95% coverage",
+    core_parameters_covered = "Core parameters covered",
+    maximum_absolute_standardized_error = "Maximum absolute standardized error",
+    critical_variance_parameters_all_covered = "Critical variance parameters covered",
+    sensor_effect_correlation = "Sensor-effect correlation",
+    sensor_effect_95_coverage = "Sensor-effect 95% coverage",
+    day_effect_correlation = "Day-effect correlation",
+    day_effect_95_coverage = "Day-effect 95% coverage"
+  )
+
+  rec2 <- recovery2
+  rec2$Metric <- unname(metric_lookup[rec2$metric])
+
+  rec2$Value <- ifelse(
+    rec2$metric %in% c("core_95_coverage", "sensor_effect_95_coverage", "day_effect_95_coverage"),
+    sprintf("%.1f%%", 100 * rec2$value),
+    ifelse(
+      rec2$metric == "core_parameters_covered",
+      sprintf("%d / 17", round(rec2$value)),
+      ifelse(
+        rec2$metric == "critical_variance_parameters_all_covered",
+        ifelse(rec2$value == 1, "Yes", "No"),
+        sprintf("%.3f", rec2$value)
+      )
+    )
+  )
+
+  kable_clean(
+    rec2[, c("Metric", "Value")],
+    "M4 confirmation parameter-recovery metrics."
+  )
+} else {
+  rec_fallback <- data.frame(
+    Metric = c(
+      "Maximum R-hat", "Minimum ESS", "Core 95% coverage", "Core parameters covered",
+      "Maximum absolute standardized error", "Sensor-effect correlation",
+      "Sensor-effect 95% coverage", "Day-effect correlation", "Day-effect 95% coverage"
+    ),
+    Value = c(1.019, 471.7, 0.941, 16, 2.02, 0.980, 0.981, 0.918, 0.956)
+  )
+  kable_clean(rec_fallback, "M4 confirmation parameter-recovery metrics.")
+}
+```
+
+The confirmation replicate passed all pre-specified criteria: maximum $\hat R=1.019$, minimum ESS approximately 472, 16/17 core parameters covered, all critical variance parameters covered, sensor-effect correlation 0.980 with 98.1% coverage, and day-effect correlation 0.918 with 95.6% coverage.
+
+```{r}
+#| label: fig-recovery-core
+#| fig-cap: "M4 confirmation recovery of the core parameters. Coloured intervals show posterior uncertainty and hollow diamonds mark the true simulated values."
+
+include_figure("outputs/figures/report_m4_recovery_core.png")
+```
+
+```{r}
+#| label: fig-recovery-sensor
+#| fig-cap: "Recovery of simulated sensor random effects in the independent M4 confirmation experiment."
+
+include_figure("outputs/figures/report_m4_recovery_sensor.png")
+```
+
+```{r}
+#| label: fig-recovery-day
+#| fig-cap: "Recovery of simulated day random effects in the independent M4 confirmation experiment; colours identify day of week."
+
+include_figure("outputs/figures/report_m4_recovery_day.png")
+```
+
+Together, the two experiments support the ability of the M4 fitting procedure to recover its fixed effects, dispersion and hierarchical variance structure under the study design. The first replicate is retained in the audit trail rather than discarded because it provides useful evidence about finite-realization confounding between date-level effects and weekday contrasts.
+
+# Results and Model Checking
+
+## Model Comparison
+
+DIC was required by the project instructions and was computed for all fitted Bayesian models [@spiegelhalter2002dic]. Because DIC can be sensitive in hierarchical latent-variable models, it is interpreted alongside posterior predictive checks rather than as the sole model-selection criterion.
+
+```{r}
+#| label: tbl-model-comparison
+
+if (!is.null(model_comp)) {
+  out <- data.frame(
+    Model = model_comp$model,
+    `Mean deviance` = format(round(model_comp$mean_deviance), big.mark = ",", scientific = FALSE),
+    pD = sprintf("%.1f", model_comp$effective_parameters_pD),
+    DIC = format(round(model_comp$DIC), big.mark = ",", scientific = FALSE),
+    `Improvement vs previous` = ifelse(
+      is.na(model_comp$improvement_from_previous),
+      "",
+      format(round(model_comp$improvement_from_previous), big.mark = ",", scientific = FALSE)
+    ),
+    `Delta DIC from best` = format(round(model_comp$delta_DIC_from_best), big.mark = ",", scientific = FALSE),
+    `Max R-hat` = sprintf("%.3f", model_comp$max_rhat),
+    `Min ESS` = format(round(model_comp$min_ess), big.mark = ",", scientific = FALSE),
+    check.names = FALSE
+  )
+  kable_clean(out, "Final DIC comparison for M1-M4.")
+} else {
+  cmp_fallback <- data.frame(
+    Model = c("M1", "M2", "M3", "M4"),
+    `Mean deviance` = c(89255245, 380394, 350531, 348411),
+    pD = c(14.1, 14.7, 62.9, 370.0),
+    DIC = c(89255259, 380409, 350594, 348781),
+    `Delta DIC` = c(88906478, 31628, 1813, 0)
+  )
+  kable_clean(cmp_fallback, "Final DIC comparison for M1-M4.", digits = 1)
+}
+```
+
+The model sequence shows four distinct results:
+
+- M1 is severely inadequate because the Poisson variance is far too small for the data.
+- M2 produces a very large improvement by introducing Negative Binomial overdispersion.
+- M3 improves substantially again after persistent sensor heterogeneity is included.
+- M4 yields a further DIC reduction of approximately 1,813 despite adding 364 date effects, supporting the day-level extension when considered together with PPC results.
+
+```{r}
+#| label: fig-dic
+#| fig-cap: "DIC comparison across the four Bayesian count models. Lower DIC indicates better relative fit within the fitted candidate set."
+
+include_figure("outputs/figures/report_model_comparison_dic.png")
+```
+
+## Posterior Predictive Checks
+
+Posterior predictive checks evaluate whether data simulated from the fitted model reproduce important features of the observed data. The diagnostics were intentionally feature-specific rather than reduced to a single pass/fail score.
+
+### M1-M3 progression
+
+The Poisson model severely underestimated the observed variability. M2 improved observation-level dispersion but still failed to reproduce the large persistent differences between sensors. M3 solved the sensor-level deficiency: 100% of observed sensor means fell inside the corresponding 95% posterior predictive intervals. However, M3 reproduced only 65.7% of date means, and its posterior predictive variation in date means was materially below the observed standard deviation of 1,781.
+
+### M3 to M4 refinement
+
+M4 was introduced specifically to address this date-level deficiency. The targeted PPC showed:
+
+```{r}
+#| label: tbl-m3-m4-ppc
+
+ppc_summary <- data.frame(
+  Feature = c(
+    "Sensor-mean interval coverage",
+    "Date-mean interval coverage",
+    "Observed SD of date means",
+    "M3 predictive SD of date means",
+    "M4 predictive SD of date means",
+    "Observed 95th percentile",
+    "M4 predictive 95th-percentile interval"
+  ),
+  M3 = c("100%", "65.7%", "1,781", "1,379-1,524", "—", "33,262", "—"),
+  M4 = c("100%", "99.5%", "1,781", "—", "1,768-1,908", "33,262", "33,327-34,489")
+)
+
+kable_clean(ppc_summary, "Targeted posterior predictive comparison of M3 and M4.")
+```
+
+The key result is structural: M4 directly fixes the feature that motivated its addition while preserving the successful sensor-level fit. It is therefore preferred over M3 among the fitted models.
+
+M4 is **not perfect**. It still tends to produce slightly excessive observation-level dispersion and an upper tail that is somewhat heavier than observed. The 95th-percentile discrepancy is small, but maxima and very high-count proportions remain imperfect. This residual tail mismatch is retained as a limitation rather than motivating an open-ended sequence of increasingly complex models.
+
+Posterior predictive interval coverage for fitted dates and sensors is an **in-sample model-checking diagnostic**, not a claim about future out-of-sample predictive coverage.
+
+```{r}
+#| label: fig-ppc-statistics
+#| fig-cap: "M3-M4 posterior predictive comparison for global distributional statistics."
+
+include_figure("outputs/figures/report_ppc_m3_m4_statistics.png")
+```
+
+Across the global test statistics, M4 improves the feature that motivated its introduction—shared date-level variability—while some observation-level tail statistics remain slightly over-dispersed.
+
+```{r}
+#| label: fig-ppc-sensor-means
+#| fig-cap: "M3-M4 posterior predictive checks of sensor-level mean activity."
+
+include_figure("outputs/figures/report_ppc_m3_m4_sensor_means.png")
+```
+
+Both hierarchical models reproduce persistent between-sensor differences well; the addition of the day effect does not degrade that successful part of M3.
+
+```{r}
+#| label: fig-ppc-date-means
+#| fig-cap: "M3-M4 posterior predictive checks of shared date-level variation."
+
+include_figure("outputs/figures/report_ppc_m3_m4_date_means.png")
+```
+
+The contrast is clearest at the date level: M3 predictive bands are too narrow for many observed daily network means, whereas M4 follows the shared date-to-date fluctuations much more closely.
+
+```{r}
+#| label: fig-ppc-quantiles
+#| fig-cap: "M3-M4 posterior predictive comparison of observed and replicated count quantiles."
+
+include_figure("outputs/figures/report_ppc_m3_m4_quantiles.png")
+```
+
+The predictive quantiles track the bulk of the observed distribution closely. The remaining discrepancy is concentrated toward the upper tail, consistent with the heavier replicated maxima and high-count proportions noted above.
+
+## M4 Posterior Inference
+
+Regression coefficients are interpreted on the multiplicative count scale. For a coefficient $\beta$, $100[\exp(\beta)-1]$ is the percentage change in the conditional expected daily count for a one-unit predictor change, holding the other terms fixed. For standardized continuous covariates, one unit means one standard deviation.
+
+Directional posterior probabilities $P(\beta>0\mid y)$ and $P(\beta<0\mid y)$ are reported as Bayesian evidence about coefficient direction. They are not frequentist p-values and are not described using binary “significance” language.
+For the Bayesian hypothesis-assessment component of the project, these posterior probabilities are used to evaluate the directional hypotheses $H_+:\beta>0$ and $H_-:\beta<0$. Evidence is summarized probabilistically rather than through a binary accept/reject decision.
+
+```{r}
+#| label: tbl-m4-effects
+
+if (!is.null(effects)) {
+  out <- data.frame(
+    Effect = effects$effect,
+    `Posterior median change` = sprintf("%.1f%%", effects$percent_change_median),
+    `95% CrI` = sprintf(
+      "[%.1f%%, %.1f%%]",
+      effects$percent_change_q025,
+      effects$percent_change_q975
+    ),
+    Direction = effects$posterior_direction,
+    `P(direction)` = sprintf("%.3f", effects$directional_probability),
+    check.names = FALSE
+  )
+  kable_clean(out, "Final M4 fixed-effect summaries.")
+} else {
+  cat("*M4 effect summary table not found at render time.*")
+}
+```
+
+```{r}
+#| label: fig-m4-effects
+#| fig-cap: "M4 posterior percentage-change estimates and 95% credible intervals."
+
+include_figure("outputs/figures/report_m4_effect_estimates.png")
+```
+
+### Day of week and public holidays
+
+Relative to Monday, expected activity is higher from Tuesday through Saturday. Friday has the largest estimated contrast, approximately **`r sprintf("%.1f%%", fri_pct)` higher** than Monday. Tuesday-Saturday effects have essentially complete posterior support for a positive direction.
+
+Sunday is close to Monday: the posterior median is approximately -1.9%, with a 95% credible interval spanning zero. Public holidays are associated with approximately **`r sprintf("%.1f%%", abs(holiday_pct))` lower** expected activity, with essentially complete posterior support for a negative effect.
+
+### Weather
+
+A one-standard-deviation increase in log-transformed precipitation is associated with approximately **`r sprintf("%.1f%%", abs(rain_pct))` lower** expected activity, and the entire 95% credible interval is negative. Mean temperature has a small positive posterior median (about +0.9% per standard deviation), but its 95% credible interval slightly overlaps zero after the shared day effect is included.
+
+The widened temperature uncertainty in M4 is substantively important: the day random effect absorbs common daily shocks that a simpler model can otherwise attribute too confidently to measured daily covariates.
+
+### Urban-environment associations
+
+The spatial fixed effects are estimated from only `r n_sensors` unique monitoring locations, even though the dataset contains `r fmt0(n_obs)` sensor-days. These coefficients therefore have substantially less independent information than the repeated row count may suggest.
+
+Business count and resident population show substantial posterior uncertainty. Built coverage has a posterior median association of approximately **+`r sprintf("%.1f%%", coverage_pct)` per SD**, while median structure height has a posterior median association of approximately **+`r sprintf("%.1f%%", height_pct)` per SD**. Their directional probabilities are high, but their 95% credible intervals narrowly include zero. These results are therefore described as **suggestive positive associations**, not conclusive or causal effects.
+
+Because the sensor random effect captures persistent unmeasured location characteristics, all built-environment coefficients are conditional between-location associations under the model's random-effect assumptions.
+
+## Variance and Dispersion Parameters
+
+```{r}
+#| label: tbl-m4-variance
+
+if (!is.null(variance_pars)) {
+  out <- data.frame(
+    Parameter = variance_pars$parameter,
+    Description = variance_pars$label,
+    `Posterior median` = round(variance_pars$median, 4),
+    `95% CrI` = sprintf(
+      "[%.4f, %.4f]",
+      variance_pars$q025,
+      variance_pars$q975
+    ),
+    check.names = FALSE
+  )
+  kable_clean(out, "M4 dispersion and hierarchical variance parameters.")
+} else {
+  vc_fallback <- data.frame(
+    Parameter = c("phi", "sigma_sensor", "sigma_day"),
+    Median = c(13.8, 0.601, 0.0963),
+    `2.5%` = c(13.5, 0.498, 0.0884),
+    `97.5%` = c(14.1, 0.738, 0.105)
+  )
+  kable_clean(vc_fallback, "M4 dispersion and hierarchical variance parameters.")
+}
+```
+
+The sensor random-effect standard deviation is much larger than the day random-effect standard deviation on the log scale. A one-standard-deviation sensor difference corresponds approximately to a multiplicative factor of $\exp(0.601)\approx1.82$ in expected activity, illustrating the scale of persistent location heterogeneity that remains after the measured spatial covariates are included. By contrast, $\exp(0.0963)\approx1.10$, so the typical shared date deviation is roughly 10% on the multiplicative scale.
+
+## Sensor Random Effects
+
+The final M4 sensor effects describe persistent location-specific deviations after adjustment for the measured temporal and urban-context covariates. Positive values indicate sensors with higher expected activity than their fixed-effect baseline, and negative values indicate lower expected activity. They are descriptive residual location effects, not causal rankings of places.
+
+```{r}
+#| label: fig-m4-sensor-random-effects
+#| fig-cap: "Posterior medians and 95% credible intervals for the 53 M4 sensor random effects, ordered from lower to higher posterior median."
+
+include_figure("outputs/figures/report_m4_sensor_random_effects.png")
+```
+
+The ordered intervals show that substantial persistent heterogeneity remains even after the measured spatial predictors are included. Sensors near the extremes are summarized below to make the scale interpretable without implying that the ordering identifies causes.
+
+```{r}
+#| label: tbl-m4-sensor-random-effect-extremes
+
+if (!is.null(sensor_re_extremes)) {
+  out <- data.frame(
+    Group = sensor_re_extremes$group,
+    Sensor = paste0("S", sensor_re_extremes$sensor_index),
+    `Location ID` = sensor_re_extremes$location_id,
+    `Posterior median` = sprintf("%.3f", sensor_re_extremes$posterior_median),
+    `95% CrI` = sprintf(
+      "[%.3f, %.3f]",
+      sensor_re_extremes$q025,
+      sensor_re_extremes$q975
+    ),
+    check.names = FALSE
+  )
+  kable_clean(
+    out,
+    "Sensors with the five lowest and five highest M4 random-effect posterior medians."
+  )
+} else {
+  cat("*Sensor random-effect extremes table not found at render time.*")
+}
+```
+
+## Predictions
+
+Two types of predictions are kept conceptually separate.
+
+**Conditional scenario expectations** set the sensor and date random effects to zero and therefore describe a reference sensor-day at specified covariate values. They are not population-average marginal means.
+
+**New sensor-day posterior predictive counts** draw new sensor and day random effects and Negative Binomial observation noise, so their intervals are much wider and represent uncertainty for a new hierarchical observational unit.
+
+```{r}
+#| label: tbl-scenario-predictions
+
+if (!is.null(scenario_pred)) {
+  numfmt <- function(x) format(
+    round(x),
+    big.mark = ",",
+    scientific = FALSE,
+    trim = TRUE
+  )
+
+  out <- data.frame(
+    Scenario = scenario_pred$scenario,
+    `Conditional expectation, median [95% CrI]` = paste0(
+      numfmt(scenario_pred$expected_count_median),
+      " [",
+      numfmt(scenario_pred$expected_count_q025),
+      ", ",
+      numfmt(scenario_pred$expected_count_q975),
+      "]"
+    ),
+    `New sensor-day prediction, median [95% PI]` = paste0(
+      numfmt(scenario_pred$predictive_count_median),
+      " [",
+      numfmt(scenario_pred$predictive_count_q025),
+      ", ",
+      numfmt(scenario_pred$predictive_count_q975),
+      "]"
+    ),
+    check.names = FALSE
+  )
+
+  kable_clean(
+    out,
+    "Representative M4 conditional expectations and new-sensor-day predictive intervals."
+  )
+} else {
+  cat("*Scenario prediction table not found at render time.*")
+}
+```
+
+The contrast between the two interval types is substantial: posterior uncertainty in the conditional mean is comparatively narrow, whereas prediction for a new sensor-day is much wider because it additionally integrates new sensor heterogeneity, new day heterogeneity and Negative Binomial sampling variation.
+
+```{r}
+#| label: fig-scenario-predictions
+#| fig-cap: "Conditional scenario predictions for a reference sensor-day. Sensor and day random effects are fixed at zero."
+
+include_figure("outputs/figures/report_m4_scenario_predictions.png")
+```
+
+The scenario figure makes the same distinction on the expected-count scale: calendar effects shift the reference expectation relatively precisely, while the urban-context scenarios have visibly wider credible intervals because their coefficients are informed by only 53 independent sensor locations.
+
+Existing-sensor reference predictions additionally use each fitted sensor's posterior random effect, allowing the expected Monday/non-holiday activity under average weather to vary across the monitored locations.
+
+```{r}
+#| label: fig-sensor-map
+#| fig-cap: "Posterior median reference-condition expected activity across retained sensors within the City of Melbourne municipal boundary."
+
+include_figure("outputs/figures/report_m4_sensor_prediction_map.png")
+```
+
+The map is a model-adjusted baseline comparison rather than a map of raw annual totals: each point is evaluated under the same Monday, non-holiday and average-weather condition, so the remaining spatial differences are driven by the fitted sensor effect together with sensor-level urban context.
+
+## Residual Spatial Analysis
+
+After fitting M4, the posterior sensor effects were tested for residual spatial structure using row-standardized, symmetrized k-nearest-neighbour weights in projected coordinates. Four-nearest-neighbour (4-NN) weights were used as the primary diagnostic and 6-NN as a sensitivity check.
+
+```{r}
+#| label: tbl-moran
+
+moran <- data.frame(
+  Neighbourhood = c("4-NN", "6-NN"),
+  `Observed Moran I` = c(0.00558, 0.0383),
+  `Permutation positive-tail p` = c(0.360, 0.193),
+  `Permutation two-sided p` = c(0.778, 0.382),
+  `Posterior mean Moran I` = c(0.0408, 0.0692),
+  `Posterior P(I > 0)` = c(0.9322, 1.000),
+  check.names = FALSE
+)
+
+kable_clean(moran, "Residual spatial dependence in M4 sensor effects.", digits = 4)
+```
+
+The observed Moran's $I$ values are close to zero, and permutation tests do not provide strong evidence of positive spatial clustering. Posterior draws tend to yield slightly positive Moran's $I$, especially under 6-NN, but the estimated magnitude is small. The two results are not contradictory: the posterior distribution can consistently favour a small positive value while the observed spatial pattern is not extreme under permutation.
+
+Therefore, the diagnostics do **not** support adding an explicit spatial random-effect model solely to improve the final analysis. The conclusion is deliberately phrased as an absence of **strong or consequential** residual spatial dependence rather than a claim that spatial autocorrelation is exactly zero.
+
+```{r}
+#| label: fig-moran-posterior
+#| fig-cap: "Posterior distribution of Moran's I for the M4 sensor effects under the evaluated neighbourhood definitions."
+
+include_figure("outputs/figures/report_m4_residual_moran_posterior.png")
+```
+
+```{r}
+#| label: fig-sensor-residual-map
+#| fig-cap: "Posterior mean M4 sensor residual effects across retained sensors within the City of Melbourne municipal boundary."
+
+include_figure("outputs/figures/report_m4_sensor_residual_effect_map.png")
+```
+
+The residual-effect map does not show a broad contiguous high- or low-effect region across the monitored network, which is consistent with the small Moran's $I$ magnitudes. The map and Moran diagnostics therefore support the same conclusion: weak residual spatial structure may remain, but it is not strong enough to justify a fifth spatial model within this project.
+
+# Robustness Checks
+
+## Frequentist Negative Binomial Mixed Model
+
+As a bonus sensitivity analysis, an analogous frequentist Negative Binomial mixed model was fitted using `mgcv::bam()` with sensor and date random intercepts. The comparison is not used to replace the Bayesian analysis; it tests whether the main coefficient directions and variance components depend strongly on the inferential framework.
+
+The agreement is strong: 12 of 13 fixed-effect directions match. The only directional mismatch is business count, for which both frameworks show substantial uncertainty.
+
+```{r}
+#| label: tbl-bayes-frequentist
+
+if (!is.null(freq_cmp)) {
+  out <- data.frame(
+    Effect = freq_cmp$effect,
+    `Bayesian change [95% CrI]` = sprintf(
+      "%.1f%% [%.1f%%, %.1f%%]",
+      freq_cmp$bayesian_percent_change,
+      freq_cmp$bayesian_q025,
+      freq_cmp$bayesian_q975
+    ),
+    `Frequentist change [95% CI]` = sprintf(
+      "%.1f%% [%.1f%%, %.1f%%]",
+      freq_cmp$frequentist_percent_change,
+      freq_cmp$frequentist_q025,
+      freq_cmp$frequentist_q975
+    ),
+    `Frequentist p` = format.pval(
+      freq_cmp$frequentist_p_value,
+      digits = 3,
+      eps = 0.001
+    ),
+    `Same direction` = ifelse(freq_cmp$same_direction, "Yes", "No"),
+    check.names = FALSE
+  )
+  kable_clean(out, "Bayesian M4 and frequentist NB mixed-model fixed-effect comparison.")
+} else {
+  cat("*Bayesian-frequentist comparison table not found at render time.*")
+}
+```
+
+```{r}
+#| label: fig-bayes-frequentist
+#| fig-cap: "Comparison of Bayesian M4 and frequentist Negative Binomial mixed-model effect estimates."
+
+include_figure("outputs/figures/report_bayesian_frequentist_comparison.png")
+```
+
+The two frameworks nearly overlap for the weekday, holiday and precipitation effects. The larger visual differences occur among the urban-context coefficients, where both approaches already indicate much greater uncertainty; the business-count sign difference is therefore not evidence of a stable contradiction.
+
+The dispersion and random-effect estimates are particularly close:
+
+```{r}
+#| label: tbl-frequentist-dispersion
+
+if (!is.null(freq_disp)) {
+  out <- data.frame(
+    Quantity = freq_disp$quantity,
+    `Bayesian median` = round(freq_disp$bayesian_median, 3),
+    `Bayesian 95% CrI` = sprintf(
+      "[%.3f, %.3f]",
+      freq_disp$bayesian_q025,
+      freq_disp$bayesian_q975
+    ),
+    `Frequentist estimate` = round(freq_disp$frequentist_estimate, 3),
+    check.names = FALSE
+  )
+  kable_clean(out, "Negative Binomial dispersion comparison.")
+}
+```
+
+```{r}
+#| label: tbl-frequentist-variance
+
+if (!is.null(freq_vc)) {
+  component_label <- c(
+    "s(sensor_factor)" = "Sensor random effect",
+    "s(date_factor)" = "Day random effect"
+  )
+
+  out <- data.frame(
+    Component = unname(component_label[freq_vc$component]),
+    `Frequentist SD` = sprintf("%.4f", freq_vc$std.dev),
+    `Approx. 95% CI` = sprintf(
+      "[%.4f, %.4f]",
+      freq_vc$lower,
+      freq_vc$upper
+    ),
+    check.names = FALSE
+  )
+
+  kable_clean(
+    out,
+    "Frequentist random-effect standard deviations."
+  )
+}
+```
+
+The frequentist sensor SD is approximately 0.601 compared with a Bayesian posterior median of 0.601; the frequentist date SD is approximately 0.0962 compared with a Bayesian posterior median of 0.0963; and the frequentist Negative Binomial dispersion is approximately 14.0 compared with a Bayesian median of 13.8.
+
+The `mgcv` coefficient intervals are treated as approximate Wald intervals. Built coverage and structure height have intervals excluding zero in the frequentist fit, whereas the Bayesian 95% credible intervals narrowly overlap zero. This difference is reported transparently rather than used to privilege one inferential framework over the other.
+
+# Discussion
+
+## Key Interpretations
+
+The modelling sequence identifies a clear hierarchy of variation in Melbourne pedestrian activity.
+
+- **Poisson sampling is inadequate.** The observed variance is thousands of times larger than the mean, and M1 consequently produces unrealistically narrow coefficient intervals and extremely poor DIC. Introducing a Negative Binomial likelihood is essential.
+
+- **Observation-level overdispersion alone is insufficient.** M2 still treats repeated observations at a sensor as conditionally independent after the measured covariates are included. M3 shows that a large amount of what appears as raw overdispersion in M2 is actually persistent between-sensor heterogeneity: $\phi$ rises from approximately 2.73 in M2 to 12.3 in M3 once sensor effects are introduced.
+
+- **Shared day-level variation is also required.** M3 under-reproduces common date-to-date variation. The addition of the M4 day effect addresses exactly this deficiency and substantially improves date-level PPC performance without damaging the sensor-level fit. The final $\sigma_{\text{day}}$ is much smaller than $\sigma_{\text{sensor}}$, but its inclusion is nevertheless supported by both DIC and posterior predictive diagnostics.
+
+- **Recurring calendar patterns and precipitation provide the strongest temporal signals.** Tuesday-Saturday activity is higher than Monday, while public holidays and wetter conditions are associated with lower expected counts. Temperature becomes comparatively uncertain after the common day effect is included, illustrating the importance of modelling latent date-level shocks before interpreting daily covariates too confidently.
+
+- **Urban-environment associations are more uncertain.** Built coverage and structure height have positive posterior medians and high directional probabilities, but their 95% credible intervals narrowly overlap zero. Business count and resident population are still more uncertain. These coefficients are estimated across only 53 unique sensor locations and must be interpreted in that context.
+
+## Limitations
+
+Several limitations are important for interpretation.
+
+**Observational design.** The analysis estimates associations, not causal effects. Sensor placement, surrounding land use and pedestrian activity are jointly related to location characteristics that cannot all be measured.
+
+**Non-random monitoring network.** Melbourne pedestrian sensors are placed at locations selected for pedestrian use, retail/event activity and movement flows [@citySensorLocations]. The retained 53 sensors therefore do not form a random sample of all streets or neighbourhoods in Melbourne.
+
+**Temporal mismatch in contextual data.** The response is from 2025, whereas business and dwelling context is from 2024, building context from the 2023 published layer, and population context from the 2021 Census. These variables are treated as slowly changing context rather than exact concurrent measurements.
+
+**Finite number of spatial units.** Spatial coefficients are effectively informed by 53 sensor locations. Repeated daily observations improve temporal inference and random-effect estimation but do not create 18,671 independent locations.
+
+**Residual tail mismatch.** M4 reproduces sensor and date structure well but still produces a somewhat heavier observation-level upper tail than observed. The final model is therefore preferred among the fitted candidates, not claimed to be a perfect data-generating mechanism.
+
+**In-sample PPC.** Posterior predictive checks using fitted sensor and date effects measure reproduction of the observed hierarchical structure. They should not be interpreted as external predictive validation.
+
+**DIC limitations.** DIC is included because it is an explicit project requirement, but hierarchical latent-variable models can make effective-parameter calculations sensitive. The model choice therefore relies on DIC together with PPC and substantive structure rather than DIC alone.
+
+## Future Work
+
+Several extensions could be considered with more time or a different project scope:
+
+- external validation on a future period rather than fitted 2025 dates;
+- event, public-transport disruption and special-activity covariates to explain residual day effects and high-count tails;
+- sensitivity analysis for alternative pedestrian catchment distances such as 400 m;
+- richer spatial models if future residual diagnostics show stronger spatial dependence;
+- interaction terms where supported by a larger number of independent sensor locations;
+- modelling hourly counts directly with explicit within-day temporal structure.
+
+These extensions are not required to support the conclusions of the present analysis.
+
+# Conclusion
+
+This project used a fully Bayesian MCMC workflow to model daily pedestrian counts across Melbourne monitoring locations. The analysis demonstrates that the statistical structure of the data cannot be represented adequately by Poisson sampling or by a non-hierarchical Negative Binomial model alone.
+
+The preferred fitted model, M4, combines a Negative Binomial likelihood with persistent sensor random effects and shared date random effects. It has the lowest DIC among the four candidates and, more importantly, directly improves the posterior predictive feature that motivated its introduction: common date-level variability. MCMC diagnostics and an independently seeded full-design parameter-recovery experiment support the reliability of the final inference.
+
+The posterior results show strong recurring weekday patterns, lower pedestrian activity on public holidays and wetter days, and substantial unexplained differences between sensor locations. Built coverage and structure height show suggestive positive associations, but spatial fixed-effect uncertainty remains important after hierarchical sensor structure is accounted for. Residual sensor effects exhibit at most weak spatial dependence, so an additional explicit spatial random-effect model was not warranted by the diagnostics.
+
+Overall, the analysis shows why hierarchical Bayesian count modelling is useful for urban sensor data: it separates observation-level overdispersion, persistent location heterogeneity and shared daily variation while propagating uncertainty through estimation and prediction.
+
+# Reproducibility
+
+## Data Provenance
+
+The workflow uses publicly available datasets from the City of Melbourne, Australian Bureau of Statistics and Open-Meteo. Raw data are separated from processed model inputs, and the final selected modelling dataset is locked before model fitting.
+
+The final modelling dataset SHA-256 recorded during the analysis was:
+
+```text
+72de7527dba56f62e42305f5e94ff30d89455be187df05f270cb57967a0b5674
+```
+
+Computationally intensive MCMC and recovery experiments were executed with four independent JAGS chains in parallel. Input/output checksums and run logs are retained under `docs/reproducibility/`.
+
+## File Structure
+
+```text
+melbourne-pedestrian-bayes/
+├── data/
+│   ├── raw/                  # ignored raw downloads
+│   ├── interim/              # intermediate spatial/cleaning files
+│   ├── processed/            # locked modelling datasets
+│   └── metadata/
+├── R/
+│   ├── 00_setup.R
+│   ├── ...
+│   ├── 10b_prior_predictive_m4.R
+│   ├── 11b_parameter_recovery_m4.R
+│   ├── 11c_parameter_recovery_m4_confirmation.R
+│   ├── ...
+│   ├── 19_predictions_maps.R
+│   └── 20_frequentist_comparison.R
+├── models/jags/
+├── outputs/
+│   ├── tables/
+│   ├── figures/
+│   ├── maps/
+│   └── mcmc/                 # large local MCMC objects, Git-ignored
+├── docs/reproducibility/
+└── report/
+    ├── final_report.qmd
+    ├── report_style.css
+    └── references.bib
+```
+
+## How to Reproduce
+
+From the project root, run the numbered scripts in analytical order. JAGS fitting scripts can be executed with `Rscript --vanilla` to ensure a clean R session.
+
+Once all analytical outputs exist, render the final HTML report with:
+
+```bash
+quarto render report/final_report.qmd
+```
+
+## Software
+
+The analysis used R 4.6.1, JAGS 4.3.2 and `rjags` 4.17. Spatial preparation used `sf`; data manipulation and reporting used the standard R tidy-data and Quarto workflow. Posterior fitting used four independent JAGS chains and CPU-based computation.
+
+# References

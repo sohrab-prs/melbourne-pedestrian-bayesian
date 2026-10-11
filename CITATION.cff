@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it using the metadata below."
+title: "Bayesian Hierarchical Modelling of Pedestrian Activity in Melbourne"
+type: software
+authors:
+  - family-names: "Seyyedi Parsa"
+    given-names: "Sohrab"
+repository-code: "https://github.com/sohrab-prs/melbourne-pedestrian-bayesian"
+url: "https://sohrab-prs.github.io/melbourne-pedestrian-bayesian/"
+license: MIT

@@ -1,0 +1,223 @@
+body {
+  font-size: 17.25px;
+  line-height: 1.67;
+  color: #202124;
+}
+
+#quarto-content,
+.page-columns,
+main.content {
+  max-width: none !important;
+}
+
+main.content {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.sidebar nav[role="doc-toc"] ul > li > a.active,
+.sidebar nav[role="doc-toc"] ul > li > ul > li > a.active {
+  font-weight: 650;
+}
+
+h1 {
+  margin-top: 2.3rem;
+  padding-bottom: 0.42rem;
+  border-bottom: 2.4px solid #768692;
+  font-weight: 700;
+}
+
+h2 {
+  margin-top: 1.9rem;
+  padding-bottom: 0.24rem;
+  border-bottom: 1.15px solid #d0d7dc;
+  font-weight: 650;
+}
+
+h3 {
+  margin-top: 1.4rem;
+  font-weight: 625;
+}
+
+.quarto-title-block .title {
+  font-size: 2.5rem;
+  font-weight: 720;
+  line-height: 1.13;
+}
+
+.quarto-title-block .subtitle {
+  font-size: 1.32rem;
+  color: #4a4f54;
+}
+
+.callout {
+  margin-top: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+blockquote {
+  color: #111111;
+  border-left: 4px solid #4b6575;
+  background: #f7f9fa;
+  padding: 0.72rem 1rem;
+  margin: 1rem 0 1.25rem 0;
+}
+
+blockquote p {
+  color: #111111 !important;
+  margin-bottom: 0;
+}
+
+/* Compact tables without sacrificing legibility. */
+.cell-output-display {
+  width: 100%;
+  max-width: none !important;
+  overflow-x: visible;
+  margin-bottom: 0.9rem;
+}
+
+table.report-table,
+table.table {
+  display: table !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  table-layout: auto;
+  font-size: 0.86rem;
+  line-height: 1.30;
+  border-collapse: collapse;
+}
+
+table.report-table th,
+table.report-table td,
+table.table th,
+table.table td {
+  padding: 0.30rem 0.42rem;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+table.report-table th,
+table.table th {
+  background: #eaf1f6;
+  font-weight: 700;
+  color: #1d2730;
+  white-space: normal;
+}
+
+table.report-table th:first-child,
+table.report-table td:first-child,
+table.table th:first-child,
+table.table td:first-child {
+  white-space: normal;
+}
+
+table.report-table td:last-child,
+table.table td:last-child {
+  white-space: normal;
+}
+
+/* Keep most figures viewable as a whole on a desktop browser. */
+figure {
+  margin-top: 1.35rem;
+  margin-bottom: 1.55rem;
+}
+
+figure img {
+  display: block;
+  width: auto;
+  max-width: min(1050px, 82%);
+  max-height: 74vh;
+  margin: 0 auto;
+  height: auto;
+  object-fit: contain;
+  border: 1px solid #e0e4e7;
+  border-radius: 4px;
+}
+
+/* Figure 5 is intentionally tall because all 53 sensors are shown. */
+#fig-eda-sensor-means img {
+  max-height: none;
+  max-width: min(900px, 88%);
+}
+
+/* Dense diagnostic figures need slightly more room than ordinary plots. */
+#fig-m4-trace img,
+#fig-recovery-core img,
+#fig-ppc-statistics img,
+#fig-ppc-sensor-means img,
+#fig-ppc-date-means img,
+#fig-ppc-quantiles img {
+  max-width: min(1120px, 90%);
+  max-height: 80vh;
+}
+
+figcaption,
+.figure-caption {
+  font-size: 0.92rem;
+  color: #4b5156;
+  line-height: 1.42;
+  max-width: 1120px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.math.display {
+  overflow-x: auto;
+  margin: 1.15rem 0;
+}
+
+code {
+  font-size: 0.90em;
+}
+
+pre {
+  border-radius: 4px;
+}
+
+@media (max-width: 1200px) {
+  .cell-output-display {
+    overflow-x: auto;
+  }
+
+  table.report-table,
+  table.table {
+    width: max-content !important;
+    min-width: 100% !important;
+  }
+
+  figure img,
+  #fig-eda-sensor-means img,
+  #fig-m4-trace img,
+  #fig-recovery-core img,
+  #fig-ppc-statistics img,
+  #fig-ppc-sensor-means img,
+  #fig-ppc-date-means img,
+  #fig-ppc-quantiles img {
+    max-width: 100%;
+    max-height: none;
+  }
+}
+
+
+@media print {
+  figure,
+  .quarto-float,
+  table,
+  .cell-output-display {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  figure img {
+    max-width: 96% !important;
+    max-height: 8.2in !important;
+  }
+}

@@ -3,18 +3,51 @@
 .RData
 .Ruserdata
 
-# renv local library/cache
+# renv local state
 renv/library/
 renv/staging/
 renv/python/
+renv/local/
+renv/cellar/
+renv/sandbox/
 
 # Raw and intermediate data
 data/raw/
 data/interim/
 
-# Large generated MCMC objects
-outputs/mcmc/*.rds
-outputs/mcmc/*.RData
+# Downloaded cartography cache used only to render report maps
+data/metadata/report_cartography/
+
+# Large generated posterior / MCMC objects
+outputs/mcmc/
+
+# Machine-specific execution and transfer artifacts
+runs/
+_m4_validation_transfer/
+*_transfer/
+docs/reproducibility/m4_parameter_recovery/
+
+# Quarto caches and local rendered report copy
+.quarto/
+report/.quarto/
+report/_freeze/
+report/*_cache/
+report/*_files/
+report/final_report.html
+
+# Local backup copies created during report development
+R/*_before_*.R
+report/final_report_before_*.qmd
+report/report_style_before_*.css
+
+# Course submission packaging is kept outside the public research repository
+submission/
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
 
 # OS files
 .DS_Store

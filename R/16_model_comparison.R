@@ -9,7 +9,6 @@
 #   - convergence diagnostics
 #   - key posterior dispersion / heterogeneity parameters
 #
-# This is a light post-processing step and should run locally.
 #
 # Outputs:
 #   outputs/tables/model_comparison_dic.csv
