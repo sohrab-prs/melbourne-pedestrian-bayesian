@@ -109,7 +109,7 @@ The project includes several layers of model checking and implementation validat
 - residual spatial-autocorrelation analysis using Moran's I
 - frequentist Negative Binomial mixed-model sensitivity analysis
 
-The final M4 fit passed the pre-specified MCMC diagnostic thresholds. An independently seeded full-design parameter-recovery confirmation also passed the pre-specified recovery criteria.
+The final M4 fit passed the pre-specified MCMC diagnostic thresholds. The first full-design M4 recovery replicate narrowly missed the pre-specified core-coverage criterion; a single independently seeded confirmation replicate, run without changing the model, priors, MCMC settings or thresholds, passed. Both results are documented in the full report.
 
 Residual spatial dependence in the fitted sensor effects was weak. I therefore did not add a more complex spatial random-effect model solely for additional model complexity.
 
@@ -221,4 +221,4 @@ MSc Data Science
 
 ## Data and code licensing
 
-The analysis code will be released under the repository licence. Third-party datasets remain subject to the terms and licences of their original providers; see [`data/metadata/data_sources.csv`](data/metadata/data_sources.csv).
+The analysis code is released under the MIT License. Third-party datasets remain subject to the terms and licences of their original providers; see [`data/metadata/data_sources.csv`](data/metadata/data_sources.csv).
