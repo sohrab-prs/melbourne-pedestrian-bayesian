@@ -217,10 +217,11 @@ Possible extensions include external validation on a future period, explicit eve
 ## Author
 
 **Sohrab Seyyedi Parsa**
+*MSc in Data Science | MSc in Urban Planning*
 
-MSc Data Science
-
-MSc Urban Planning
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white)](https://github.com/sohrab-prs)
+[![GitHub](https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white)](https://github.com/sohrab-prs)
+[![Email](https://img.shields.io/badge/Email-D14836?style=flat&logo=gmail&logoColor=white)](mailto:seyyediparsa.2101087@studenti.uniroma1.it)
 
 ## Data and code licensing
 
