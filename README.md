@@ -217,7 +217,10 @@ Possible extensions include external validation on a future period, explicit eve
 ## Author
 
 **Sohrab Seyyedi Parsa**
+
 MSc Data Science
+
+MSc Urban Planning
 
 ## Data and code licensing
 
